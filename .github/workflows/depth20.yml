@@ -47,6 +47,7 @@ jobs:
           TARGET_BANNED: "50"
           TARGET_CLEAN: "50"
           RUN_ID: ${{ github.run_id }}
+          PUSH_BRANCH: depth20
           MAX_MINUTES: "330"
         run: node collect.mjs
       - name: Save to data branch

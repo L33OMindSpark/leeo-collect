@@ -2,6 +2,7 @@
 // Resumable: data/seen.txt holds hashes of players already looked at, data/results-*.json the finished ones. Run it again to continue.
 import fs from 'node:fs'
 import crypto from 'node:crypto'
+import { execSync } from 'node:child_process'
 import { analyzeGame, summarize } from './src/analyze.js'
 import { makePool } from './lib/uci.mjs'
 import { normGame } from './lib/games.js'
@@ -24,7 +25,13 @@ const count = l => prior.filter(r => r.label === l).length + results.filter(r =>
 const banRatings = prior.filter(r => r.label === 'banned').map(r => r.rating)
 const results = [], newSeen = []
 const mark = u => { const h = hash(u); if (seen.has(h)) return false; seen.add(h); newSeen.push(h); return true }
-const save = () => { fs.writeFileSync(`${DIR}/results-${RUN}.json`, JSON.stringify(results)); if (newSeen.length) { fs.appendFileSync(seenFile, newSeen.join('\n') + '\n'); newSeen.length = 0 } }
+const PUSH = process.env.PUSH_BRANCH, statusFile = DIR + '/status.json', start0 = fs.existsSync(statusFile) ? JSON.parse(fs.readFileSync(statusFile, 'utf8')) : {}
+let lastPush = Date.now()
+// progress for the live page: written on every save, pushed to the data branch every 15 minutes
+const writeStatus = extra => fs.writeFileSync(statusFile, JSON.stringify({ done: false, banned: count('banned'), clean: count('clean'), targets: [T_BANNED, T_CLEAN], depths: DEPTH2 ? [DEPTH, DEPTH2] : [DEPTH], games: GAMES, emptyRuns: start0.emptyRuns || 0, runStarted: new Date(START).toISOString(), updated: new Date().toISOString(), ...extra }))
+const save = () => { fs.writeFileSync(`${DIR}/results-${RUN}.json`, JSON.stringify(results)); if (newSeen.length) { fs.appendFileSync(seenFile, newSeen.join('\n') + '\n'); newSeen.length = 0 }
+  writeStatus({ running: true })
+  if (PUSH && Date.now() - lastPush > 15 * 60000) { lastPush = Date.now(); try { execSync(`git -C ${DIR} add -A && git -C ${DIR} -c user.name=collect-bot -c user.email=collect-bot@users.noreply.github.com commit -q -m progress && git -C ${DIR} push -q origin HEAD:${PUSH}`, { stdio: 'ignore' }) } catch {} } }
 
 async function j(u, tries = 4) {
   for (let i = 0; i < tries; i++) {
@@ -90,7 +97,7 @@ async function one(u, label) {
   console.log(`#${results.length} ${label} rating ${rating} games ${G.length}`)
 }
 
-if (count('banned') >= T_BANNED && count('clean') >= T_CLEAN) { console.log('targets reached'); fs.writeFileSync(DIR + '/status.json', JSON.stringify({ done: true, banned: count('banned'), clean: count('clean') })); process.exit(0) }
+if (count('banned') >= T_BANNED && count('clean') >= T_CLEAN) { console.log('targets reached'); writeStatus({ done: true, running: false }); process.exit(0) }
 await discover()
 // two clean players for every banned one, banned first
 const queue = [], cc = cleanCand.sort(() => Math.random() - 0.5)
@@ -102,7 +109,6 @@ for (const [u, label] of queue) {
   try { await one(u, label) } catch (e) { console.log('skip', e.message) }
 }
 save()
-const prev = fs.existsSync(DIR + '/status.json') ? JSON.parse(fs.readFileSync(DIR + '/status.json', 'utf8')) : {}
-const st = { done: count('banned') >= T_BANNED && count('clean') >= T_CLEAN, banned: count('banned'), clean: count('clean'), emptyRuns: results.length ? 0 : (prev.emptyRuns || 0) + 1, updated: new Date().toISOString() }
-fs.writeFileSync(DIR + '/status.json', JSON.stringify(st)); console.log('status', JSON.stringify(st))
+const st = { done: count('banned') >= T_BANNED && count('clean') >= T_CLEAN, emptyRuns: results.length ? 0 : (start0.emptyRuns || 0) + 1, running: false }
+writeStatus(st); console.log('status', fs.readFileSync(statusFile, 'utf8'))
 pool.terminate(); process.exit(0)

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LEEO Collection</title>
+<style>
+:root{--bg:#f7f8fb;--card:#fff;--ink:#0b1f4d;--mute:#5c6b8a;--line:#e3e8f2;--blue:#00205b;--accent:#1f5fe0;--ok:#16794c;--warn:#a15c00}
+@media(prefers-color-scheme:dark){:root{--bg:#0a1226;--card:#101a36;--ink:#eaf0ff;--mute:#93a3c6;--line:#1e2c52;--blue:#9fbdff;--accent:#5b8cff;--ok:#4cc38a;--warn:#e0a64a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1040px;margin:0 auto;padding:40px 16px 64px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:28px}
+h1{margin:0;font-size:30px;letter-spacing:-.02em;color:var(--blue)}
+h1 b{font-weight:800;letter-spacing:.06em}
+.sub{color:var(--mute);margin-top:4px}
+.upd{color:var(--mute);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;animation:rise .5s ease both}
+.card:nth-child(2){animation-delay:.08s}.card:nth-child(3){animation-delay:.16s}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.name{font-weight:700;font-size:17px;color:var(--blue)}
+.pill{font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--bg);color:var(--mute);border:1px solid var(--line)}
+.pill.run{color:var(--accent);border-color:var(--accent)}.pill.done{color:var(--ok);border-color:var(--ok)}.pill.wait{color:var(--warn);border-color:var(--warn)}
+.what{color:var(--mute);font-size:13px;margin-bottom:18px;min-height:20px}
+.row{margin:14px 0}
+.lab{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);margin-bottom:6px}
+.lab b{color:var(--ink);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.bar{height:8px;border-radius:8px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:8px;transition:width 1s cubic-bezier(.2,.7,.2,1)}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+.meta div{font-size:12px;color:var(--mute)}.meta b{display:block;font-size:15px;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.note{margin-top:22px;color:var(--mute);font-size:13px}
+.err{color:var(--warn)}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><h1><b>LEEO</b> Collection</h1><div class="sub">Fair-play research data, collected on GitHub</div></div>
+  <div class="upd" id="upd">Loading</div>
+</header>
+<div class="grid" id="grid"></div>
+<p class="note">Numbers only, no names. Progress is saved every 15 minutes and the page refreshes every minute. GitHub caches saved files for a few minutes, so the counts can lag a little.</p>
+</main>
+<script>
+const REPO = 'L33OMindSpark/leeo-collect'
+const P = [
+  { id: 'data', wf: 'Collect', name: 'Main collection', what: 'Banned and ordinary accounts, up to 100 recent games each' },
+  { id: 'depth16', wf: 'Depth experiment 16', name: 'Depth 16 test', what: 'Same games at depth 12 and depth 16' },
+  { id: 'depth20', wf: 'Depth experiment 20', name: 'Depth 20 test', what: 'Same games at depth 12 and depth 20' }
+]
+const $ = s => document.querySelector(s), esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const ago = t => { const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago' }
+const hrs = h => { if (!isFinite(h) || h < 0) return 'unknown'; if (h < 1) return Math.round(h * 60) + ' min'; if (h < 48) return h.toFixed(1) + ' h'; return (h / 24).toFixed(1) + ' days' }
+async function get(u) { try { const r = await fetch(u, { cache: 'no-store' }); return r.ok ? r.json() : null } catch { return null } }
+
+async function load() {
+  const [runs, ...st] = await Promise.all([get(`https://api.github.com/repos/${REPO}/actions/runs?per_page=50`), ...P.map(p => get(`https://raw.githubusercontent.com/${REPO}/${p.id}/status.json?t=${Date.now()}`))])
+  const R = runs?.workflow_runs || []
+  $('#grid').innerHTML = P.map((p, i) => {
+    const s = st[i], mine = R.filter(r => r.name === p.wf), live = mine.find(r => r.status !== 'completed'), finished = mine.filter(r => r.status === 'completed')
+    const state = s?.done ? ['Finished', 'done'] : live ? ['Running', 'run'] : mine.length ? ['Between jobs', 'wait'] : ['Not started', 'wait']
+    const hrsDone = finished.reduce((a, r) => a + (new Date(r.updated_at) - new Date(r.run_started_at)) / 36e5, 0) + (live ? (Date.now() - new Date(live.run_started_at)) / 36e5 : 0)
+    const tb = s?.targets?.[0] || 0, tc = s?.targets?.[1] || 0, b = s?.banned || 0, c = s?.clean || 0
+    const left = Math.max(0, tb - b) + Math.max(0, tc - c), rate = hrsDone > 0 ? (b + c) / hrsDone : 0
+    const bar = (v, t) => (t ? Math.min(100, (v / t) * 100) : 0)
+    return `<div class="card"><div class="top"><span class="name">${esc(p.name)}</span><span class="pill ${state[1]}">${state[0]}</span></div>
+      <div class="what">${esc(p.what)}${s?.depths?.length > 1 ? `. Depths ${s.depths.join(' and ')}` : ''}</div>
+      <div class="row"><div class="lab"><span>Banned accounts</span><span><b>${b}</b> / ${tb || '?'}</span></div><div class="bar"><i style="width:${bar(b, tb)}%"></i></div></div>
+      <div class="row"><div class="lab"><span>Ordinary accounts</span><span><b>${c}</b> / ${tc || '?'}</span></div><div class="bar"><i style="width:${bar(c, tc)}%"></i></div></div>
+      <div class="meta"><div>Jobs finished<b>${finished.length}${live ? ' + 1 running' : ''}</b></div><div>Last saved<b>${s?.updated ? ago(s.updated) : '-'}</b></div>
+      <div>Speed<b>${rate ? Math.round(rate * 10) / 10 + ' accounts / h' : '-'}</b></div><div>Time left<b>${s?.done ? 'Done' : rate && left ? hrs(left / rate) : '-'}</b></div></div></div>`
+  }).join('')
+  $('#upd').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  if (!runs) $('#upd').innerHTML += ' <span class="err">(GitHub limit reached, retrying)</span>'
+}
+load(); setInterval(load, 60000)
+</script>
+</body>
+</html>

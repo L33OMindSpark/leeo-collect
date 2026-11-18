@@ -41,6 +41,7 @@ jobs:
           STOCKFISH_CMD: /usr/games/stockfish
           THREADS: "4"
           RUN_ID: ${{ github.run_id }}
+          PUSH_BRANCH: data
           MAX_MINUTES: "330"
         run: node collect.mjs
       - name: Save to data branch
