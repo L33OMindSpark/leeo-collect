@@ -57,7 +57,9 @@ jobs:
         if: always() && env.stop != '1' && steps.collect.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          WF: ${{ github.workflow }}
         run: |
           S=data/status.json
-          if [ -f "$S" ] && { grep -q '"done":true' "$S" || node -e 'process.exit(JSON.parse(require("fs").readFileSync("data/status.json","utf8")).emptyRuns>=2?0:1)'; }; then echo "finished, not continuing"; cat "$S"; exit 0; fi
+          if [ -f "$S" ] && { grep -q '"done":true' "$S" || node -e 'process.exit(JSON.parse(require("fs").readFileSync("data/status.json","utf8")).emptyRuns>=2?0:1)'; }; then echo "finished, not continuing"; cat "$S"; [ -n "$NTFY_TOPIC" ] && curl -s -d "$WF finished: $(cat $S)" "https://ntfy.sh/$NTFY_TOPIC" >/dev/null || true; exit 0; fi
           gh workflow run depth16.yml -R "$GITHUB_REPOSITORY"
