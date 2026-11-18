@@ -1,7 +1,7 @@
-# Depth experiment: the same games analysed at depth 12 and depth 20, to see whether a deeper reference engine separates cheaters better.
+# Depth experiment: the same games analysed at depth 12 and depth 16, to see whether a deeper reference engine separates cheaters better.
 # Chained collection: each job runs about 5.5 hours, saves its numbers to the `data` branch, then starts the next one,
 # until the targets are reached, a STOP file appears on the data branch, or two runs in a row find nothing new.
-name: Depth experiment
+name: Depth experiment 16
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: depth
+  group: depth16
   cancel-in-progress: false
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
       - name: Load earlier progress
         run: |
           git config user.name collect-bot && git config user.email collect-bot@users.noreply.github.com
-          if git ls-remote --exit-code --heads origin depth >/dev/null 2>&1; then git fetch -q origin depth && git worktree add -q data FETCH_HEAD; else git worktree add -q --orphan -b depth data; fi
+          if git ls-remote --exit-code --heads origin depth16 >/dev/null 2>&1; then git fetch -q origin depth16 && git worktree add -q data FETCH_HEAD; else git worktree add -q --orphan -b depth16 data; fi
           [ -f data/STOP ] && echo "STOP file found" && echo "stop=1" >> "$GITHUB_ENV" || true
       - name: Install
         if: env.stop != '1'
@@ -42,17 +42,17 @@ jobs:
           STOCKFISH_CMD: /usr/games/stockfish
           THREADS: "4"
           DEPTH: "12"
-          DEPTH2: "20"
+          DEPTH2: "16"
           GAMES: "30"
-          TARGET_BANNED: "80"
-          TARGET_CLEAN: "160"
+          TARGET_BANNED: "35"
+          TARGET_CLEAN: "70"
           RUN_ID: ${{ github.run_id }}
           MAX_MINUTES: "330"
         run: node collect.mjs
       - name: Save to data branch
         if: always() && env.stop != '1'
         run: |
-          cd data && git add -A && { git commit -q -m "run ${{ github.run_id }}" && git push -q origin HEAD:depth || true; }
+          cd data && git add -A && { git commit -q -m "run ${{ github.run_id }}" && git push -q origin HEAD:depth16 || true; }
       - name: Start the next run
         if: always() && env.stop != '1' && steps.collect.outcome == 'success'
         env:
@@ -60,4 +60,4 @@ jobs:
         run: |
           S=data/status.json
           if [ -f "$S" ] && { grep -q '"done":true' "$S" || node -e 'process.exit(JSON.parse(require("fs").readFileSync("data/status.json","utf8")).emptyRuns>=2?0:1)'; }; then echo "finished, not continuing"; cat "$S"; exit 0; fi
-          gh workflow run depth.yml -R "$GITHUB_REPOSITORY"
+          gh workflow run depth16.yml -R "$GITHUB_REPOSITORY"
