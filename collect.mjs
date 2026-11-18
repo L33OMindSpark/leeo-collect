@@ -54,7 +54,7 @@ async function recent(u, n) {
   }
   return out
 }
-const side = f => ({ n: f[0], acc: f[1], match: f[2], perfect: !!f[3], sh: { n: f[7] || 0, hit: f[8] || 0 }, td: f.slice(9, 15).length === 6 ? f.slice(9, 15) : [0, 0, 0, 0, 0, 0], tm: { c: f[4], s: f[5], q: f[6] } })
+const side = f => ({ n: f[0], acc: f[1], match: f[2], perfect: !!f[3], sh: { n: f[7] || 0, hit: f[8] || 0 }, td: f.slice(9, 15).length === 6 ? f.slice(9, 15) : [0, 0, 0, 0, 0, 0], tm: { c: f[4], s: f[5], q: f[6] }, clutch: f[15] ?? null, diffAcc: f[16] ?? null, run: f[17] ?? null })
 const med = a => { const s = a.filter(Boolean).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null }
 const pct = (a, p) => { const x = [...a].sort((m, n) => m - n); return x[Math.min(x.length - 1, Math.floor(p * x.length))] }
 
