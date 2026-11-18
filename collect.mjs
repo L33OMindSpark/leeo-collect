@@ -98,6 +98,7 @@ for (let i = 0, c = 0; i < banned.length || c < cc.length; i++) { if (i < banned
 for (const [u, label] of queue) {
   if (left() < 6 * 60000) break
   if (count('banned') >= T_BANNED && count('clean') >= T_CLEAN) break
+  if (count(label) >= (label === 'banned' ? T_BANNED : T_CLEAN)) continue // that group is full
   try { await one(u, label) } catch (e) { console.log('skip', e.message) }
 }
 save()
