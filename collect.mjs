@@ -8,7 +8,7 @@ import { normGame } from './lib/games.js'
 
 const API = 'https://api.chess.com/pub', UA = { 'User-Agent': 'leeo-collect-research (open source fair-play study; contact via GitHub)' }
 const env = (k, d) => +process.env[k] || d
-const CMD = process.env.STOCKFISH_CMD || 'stockfish', THREADS = env('THREADS', 4), DEPTH = env('DEPTH', 12), GAMES = env('GAMES', 40)
+const CMD = process.env.STOCKFISH_CMD || 'stockfish', THREADS = env('THREADS', 4), DEPTH = env('DEPTH', 12), GAMES = env('GAMES', 100)
 const T_BANNED = env('TARGET_BANNED', 600), T_CLEAN = env('TARGET_CLEAN', 1500), DISC_MIN = env('DISCOVERY_MINUTES', 40), TOTAL_MIN = env('MAX_MINUTES', 330)
 const DIR = process.env.DATA_DIR || 'data', RUN = process.env.RUN_ID || String(Date.now()), START = Date.now(), left = () => TOTAL_MIN * 60000 - (Date.now() - START)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -41,7 +41,7 @@ async function j(u, tries = 4) {
 async function recent(u, n) {
   const a = await j(`${API}/player/${u}/games/archives`); if (!a) return []
   const out = []
-  for (const url of a.archives.slice().reverse().slice(0, 6)) {
+  for (const url of a.archives.slice().reverse().slice(0, 24)) {
     const m = await j(url); await sleep(70)
     for (const g of (m?.games || []).slice().reverse()) { if (g.rules !== 'chess' || !g.pgn || g.time_class === 'daily' || !g.rated) continue; const x = normGame(g.pgn, u, 'chesscom'); if (x) out.push(x); if (out.length >= n) return out }
   }
