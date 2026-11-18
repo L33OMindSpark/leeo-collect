@@ -42,6 +42,7 @@ h1 b{font-weight:800;letter-spacing:.06em}
   <div class="upd" id="upd">Loading</div>
 </header>
 <div class="grid" id="grid"></div>
+<div class="card" id="valcard" style="margin-top:16px"></div>
 <p class="note">Numbers only, no names. Progress is saved every 15 minutes and the page refreshes every minute. GitHub caches saved files for a few minutes, so the counts can lag a little.</p>
 </main>
 <script>
@@ -56,8 +57,22 @@ const ago = t => { const m = Math.round((Date.now() - new Date(t)) / 60000); ret
 const hrs = h => { if (!isFinite(h) || h < 0) return 'unknown'; if (h < 1) return Math.round(h * 60) + ' min'; if (h < 48) return h.toFixed(1) + ' h'; return (h / 24).toFixed(1) + ' days' }
 async function get(u) { try { const r = await fetch(u, { cache: 'no-store' }); return r.ok ? r.json() : null } catch { return null } }
 
+const LEVELS = ['Looks clean', 'Worth watching', 'Elevated', 'Strong signals']
+function drawVal(v) {
+  const el = $('#valcard')
+  if (!v) { el.innerHTML = '<div class="what">Detection check: not available yet.</div>'; return }
+  const bar = (label, pct, color) => `<div class="row"><div class="lab"><span>${esc(label)}</span><span>${pct.toFixed(1)}%</span></div><div class="bar"><i style="width:${pct}%;background:${color}"></i></div></div>`
+  const bTot = LEVELS.reduce((a, k) => a + (v.bannedByLevel[k] || 0), 0) || 1
+  el.innerHTML = `<div class="top"><span class="name">Detection check</span><span class="pill">AUC ${v.auc}</span></div>
+    <div class="what">On ${v.testBanned} banned and ${v.testClean} ordinary accounts the model never saw while being built. A missed account reads "Looks clean"; a false alarm reads anything else on an ordinary account.</div>
+    <div class="eyebrow" style="font:600 11px/1 -apple-system;color:var(--mute);margin:10px 0 6px">Banned accounts, by what the check said</div>
+    ${LEVELS.map((k, i) => bar(k, (v.bannedByLevel[k] || 0) / bTot * 100, i === 0 ? '#c0392b' : 'var(--accent)')).join('')}
+    <div class="eyebrow" style="font:600 11px/1 -apple-system;color:var(--mute);margin:14px 0 6px">Ordinary accounts, by what the check said</div>
+    ${LEVELS.map((k, i) => bar(k, v.cleanByLevelWeighted[k] || 0, i === 0 ? 'var(--ok)' : '#c0392b')).join('')}`
+}
 async function load() {
-  const [runs, ...st] = await Promise.all([get(`https://api.github.com/repos/${REPO}/actions/runs?per_page=50`), ...P.map(p => get(`https://raw.githubusercontent.com/${REPO}/${p.id}/status.json?t=${Date.now()}`))])
+  const [runs, val, ...st] = await Promise.all([get(`https://api.github.com/repos/${REPO}/actions/runs?per_page=50`), get(`validation.json?t=${Date.now()}`), ...P.map(p => get(`https://raw.githubusercontent.com/${REPO}/${p.id}/status.json?t=${Date.now()}`))])
+  drawVal(val)
   const R = runs?.workflow_runs || []
   $('#grid').innerHTML = P.map((p, i) => {
     const s = st[i], mine = R.filter(r => r.name === p.wf), live = mine.find(r => r.status !== 'completed'), finished = mine.filter(r => r.status === 'completed')

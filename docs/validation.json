@@ -1,0 +1,18 @@
+{
+ "testBanned": 47,
+ "testClean": 211,
+ "auc": 0.73,
+ "bannedByLevel": {
+  "Looks clean": 28,
+  "Worth watching": 5,
+  "Elevated": 7,
+  "Strong signals": 7
+ },
+ "cleanByLevelWeighted": {
+  "Looks clean": 86.5,
+  "Worth watching": 7.4,
+  "Elevated": 3.9,
+  "Strong signals": 2.2
+ },
+ "note": "Held-out accounts the model was never fitted or thresholded on. cleanByLevelWeighted is a percentage; the others are counts."
+}
