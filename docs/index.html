@@ -50,7 +50,7 @@ const REPO = 'L33OMindSpark/leeo-collect'
 const P = [
   { id: 'data', wf: 'Collect', name: 'Main collection', what: 'Banned and ordinary accounts, up to 100 recent games each' },
   { id: 'depth16', wf: 'Depth experiment 16', name: 'Depth 16 test', what: 'Same games at depth 12 and depth 16' },
-  { id: 'depth20', wf: 'Depth experiment 20', name: 'Depth 20 test', what: 'Same games at depth 12 and depth 20' }
+  { id: 'depth20', wf: 'Depth experiment 20', name: 'Depth 20 test', what: 'Same games at depth 12 and depth 20', repo: 'L33OMindSpark/leeo-depth20' }
 ]
 const $ = s => document.querySelector(s), esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 const ago = t => { const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago' }
@@ -71,10 +71,15 @@ function drawVal(v) {
     ${LEVELS.map((k, i) => bar(k, v.cleanByLevelWeighted[k] || 0, i === 0 ? 'var(--ok)' : '#c0392b')).join('')}`
 }
 async function load() {
-  const [runs, val, ...st] = await Promise.all([get(`https://api.github.com/repos/${REPO}/actions/runs?per_page=50`), get(`validation.json?t=${Date.now()}`), ...P.map(p => get(`https://raw.githubusercontent.com/${REPO}/${p.id}/status.json?t=${Date.now()}`))])
+  const repos = [...new Set(P.map(p => p.repo || REPO))]
+  const [runsByRepo, val, ...st] = await Promise.all([
+    Promise.all(repos.map(r => get(`https://api.github.com/repos/${r}/actions/runs?per_page=50`))).then(a => Object.fromEntries(repos.map((r, i) => [r, a[i]]))),
+    get(`validation.json?t=${Date.now()}`),
+    ...P.map(p => get(`https://raw.githubusercontent.com/${p.repo || REPO}/${p.id}/status.json?t=${Date.now()}`)),
+  ])
   drawVal(val)
-  const R = runs?.workflow_runs || []
   $('#grid').innerHTML = P.map((p, i) => {
+    const R = runsByRepo[p.repo || REPO]?.workflow_runs || []
     const s = st[i], mine = R.filter(r => r.name === p.wf), live = mine.find(r => r.status !== 'completed'), finished = mine.filter(r => r.status === 'completed')
     const state = s?.done ? ['Finished', 'done'] : live ? ['Running', 'run'] : mine.length ? ['Between jobs', 'wait'] : ['Not started', 'wait']
     const hrsDone = finished.reduce((a, r) => a + (new Date(r.updated_at) - new Date(r.run_started_at)) / 36e5, 0) + (live ? (Date.now() - new Date(live.run_started_at)) / 36e5 : 0)
@@ -89,7 +94,7 @@ async function load() {
       <div>Speed<b>${rate ? Math.round(rate * 10) / 10 + ' accounts / h' : '-'}</b></div><div>Time left<b>${s?.done ? 'Done' : rate && left ? hrs(left / rate) : '-'}</b></div></div></div>`
   }).join('')
   $('#upd').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  if (!runs) $('#upd').innerHTML += ' <span class="err">(GitHub limit reached, retrying)</span>'
+  if (repos.some(r => !runsByRepo[r])) $('#upd').innerHTML += ' <span class="err">(GitHub limit reached, retrying)</span>'
 }
 load(); setInterval(load, 60000)
 </script>

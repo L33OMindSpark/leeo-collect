@@ -9,7 +9,7 @@ import { normGame } from './lib/games.js'
 
 const API = 'https://api.chess.com/pub', UA = { 'User-Agent': 'leeo-collect-research (open source fair-play study; contact via GitHub)' }
 const env = (k, d) => +process.env[k] || d
-const CMD = process.env.STOCKFISH_CMD || 'stockfish', THREADS = env('THREADS', 4), DEPTH = env('DEPTH', 12), DEPTH2 = env('DEPTH2', 0), GAMES = env('GAMES', 100)
+const CMD = process.env.STOCKFISH_CMD || 'stockfish', THREADS = env('THREADS', 4), DEPTH = env('DEPTH', 12), DEPTH2 = env('DEPTH2', 0), GAMES = env('GAMES', 100), MONTHS = env('MONTHS', 24)
 const T_BANNED = env('TARGET_BANNED', 600), T_CLEAN = env('TARGET_CLEAN', 1500), DISC_MIN = env('DISCOVERY_MINUTES', 40), TOTAL_MIN = env('MAX_MINUTES', 330)
 const DIR = process.env.DATA_DIR || 'data', RUN = process.env.RUN_ID || String(Date.now()), START = Date.now(), left = () => TOTAL_MIN * 60000 - (Date.now() - START)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -48,7 +48,7 @@ async function j(u, tries = 4) {
 async function recent(u, n) {
   const a = await j(`${API}/player/${u}/games/archives`); if (!a) return []
   const out = []
-  for (const url of a.archives.slice().reverse().slice(0, 24)) {
+  for (const url of a.archives.slice().reverse().slice(0, MONTHS)) {
     const m = await j(url); await sleep(70)
     for (const g of (m?.games || []).slice().reverse()) { if (g.rules !== 'chess' || !g.pgn || g.time_class === 'daily' || !g.rated) continue; const x = normGame(g.pgn, u, 'chesscom'); if (x) out.push(x); if (out.length >= n) return out }
   }
@@ -87,8 +87,11 @@ async function one(u, label) {
   const rate = med(games.map(g => g.my))
   // clean players must match the banned ones' rating range, so rating differences cannot fake a signal
   if (label === 'clean' && banRatings.length >= 5 && (rate < pct(banRatings, 0.1) - 150 || rate > pct(banRatings, 0.9) + 150)) return
+  let lastProg = 0
   // DEPTH2 (experiment): the same games analysed again at a second depth, stored as G2 for comparison
-  const build = async depth => { const rows = []; for (const g of games) { try { const a = await analyzeGame(g, pool, depth); if (a) rows.push({ g, s: summarize(g, a) }) } catch {} }
+  const build = async depth => { const rows = []
+    for (let i = 0; i < games.length; i++) { const g = games[i]; try { const a = await analyzeGame(g, pool, depth); if (a) rows.push({ g, s: summarize(g, a) }) } catch {}
+      if (Date.now() - lastProg > 4000) { lastProg = Date.now(); writeStatus({ running: true, current: { user: hash(u), done: i + 1, total: games.length } }) } }
     return rows.filter(r => r.s.fp && r.s.fp.me[0] >= 14).map(r => ({ g: { t: r.g.t, speed: r.g.speed, my: r.g.my, opp: r.g.opp, score: r.g.score, oppName: '' }, me: side(r.s.fp.me), op: side(r.s.fp.op), dr: r.g.my >= 100 && r.g.opp >= 100 ? r.g.my - r.g.opp : null })) }
   const G = await build(DEPTH); if (G.length < 15) return
   const G2 = DEPTH2 ? await build(DEPTH2) : null
