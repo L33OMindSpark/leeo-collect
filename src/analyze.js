@@ -205,9 +205,12 @@ export function summarize(g, a) {
   const sideFP = Jx => {
     const acc = mean(Jx.map(x => x.acc)), elig = Jx.filter(x => x.i >= 20 && x.before > 10 && x.before < 90)
     let c = 0, sm = 0, q = 0
+    // same clock-time accumulator, endgame moves only (ph === 2): a flat rhythm that only shows up once
+    // material thins out can hide in the whole-game average where the opening/middlegame moves dilute it
+    let ec = 0, es = 0, eq = 0
     // longest run of near-flawless moves in undecided positions, the same measure fairlib.js's full-record path already used
     let run = 0, runBest = 0; for (const x of Jx) { if (x.i < 14) continue; if (x.before <= 10 || x.before >= 90 || x.loss >= 1.5) run = 0; else runBest = Math.max(runBest, ++run) }
-    if (a.clk && a.clk.length === ucis.length) Jx.forEach(x => { if (x.i < 10) return; const pv = a.clk[x.i - 2]; if (pv != null) { const t = Math.max(0, pv - a.clk[x.i]); c++; sm += t; q += t * t } })
+    if (a.clk && a.clk.length === ucis.length) Jx.forEach(x => { if (x.i < 10) return; const pv = a.clk[x.i - 2]; if (pv != null) { const t = Math.max(0, pv - a.clk[x.i]); c++; sm += t; q += t * t; if (x.ph === 2) { ec++; es += t; eq += t * t } } })
     const gapped = elig.filter(x => x.gap != null)
     // order-aware check: does accuracy move together with difficulty in a specific temporal pattern (not just
     // on average)? A discrete Levy area between the two streams - area swept between them move to move, not
@@ -234,7 +237,7 @@ export function summarize(g, a) {
     const decided = x => x.before <= 10 || x.before >= 90, errs = Jx.filter(x => x.loss >= T.ms)
     const errDecided = errs.length >= 4 ? errs.filter(decided).length / errs.length : null
     const allDecided = Jx.length ? Jx.filter(decided).length / Jx.length : null
-    return [Jx.length, +acc.toFixed(1), elig.length >= 8 ? +((elig.filter(x => ucis[x.i] === a.best[x.i]).length / elig.length) * 100).toFixed(1) : null, postAcc >= 96 && Jx.length >= 25 ? 1 : 0, c, +sm.toFixed(1), +q.toFixed(1), ...sharpStats(Jx, a, ucis), ...timeDiffStats(Jx, a, ucis), clutch == null ? null : +clutch.toFixed(1), diffAcc == null ? null : +diffAcc.toFixed(1), runBest, errDecided == null ? null : +errDecided.toFixed(3), allDecided == null ? null : +allDecided.toFixed(3), levy == null ? null : +levy.toFixed(3)]
+    return [Jx.length, +acc.toFixed(1), elig.length >= 8 ? +((elig.filter(x => ucis[x.i] === a.best[x.i]).length / elig.length) * 100).toFixed(1) : null, postAcc >= 96 && Jx.length >= 25 ? 1 : 0, c, +sm.toFixed(1), +q.toFixed(1), ...sharpStats(Jx, a, ucis), ...timeDiffStats(Jx, a, ucis), clutch == null ? null : +clutch.toFixed(1), diffAcc == null ? null : +diffAcc.toFixed(1), runBest, errDecided == null ? null : +errDecided.toFixed(3), allDecided == null ? null : +allDecided.toFixed(3), levy == null ? null : +levy.toFixed(3), ec, +es.toFixed(1), +eq.toFixed(1)]
   }
   const first = mine.find(x => x.i < 24 && x.loss >= T.ms && a.best[x.i])
   let fd = null
