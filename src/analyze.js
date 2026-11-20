@@ -33,35 +33,51 @@ function terminalEval(fen) {
 }
 
 // Evaluates every position of one game. Returns the raw record that gets stored.
-export async function analyzeGame(g, pool, depth, tick) {
+export async function analyzeGame(g, pool, depth, tick, skip) {
   const p = parseGame(g)
   if (!p) return null
   const ev = new Array(p.fens.length), ev2 = new Array(p.fens.length).fill(null), best = new Array(p.fens.length).fill('')
   await Promise.all(p.fens.map(async (fen, i) => {
     const t = terminalEval(fen)
     if (t !== null) { ev[i] = t; return }
+    const sk = skip ? skip(fen, i) : null
+    if (sk != null) { ev[i] = sk; return }
     const r = await pool.eval(fen, depth, 2)
     if (!r) throw new Error('stopped')
     const l = r.lines.find(x => x.mpv === 1) || r.lines[0]
     ev[i] = l ? l.cp : 0
     const l2 = r.lines.find(x => x.mpv === 2); ev2[i] = l2 ? l2.cp : null
     best[i] = l ? l.pv[0] : ''
-    tick && tick()
+    tick && tick(i, ev[i], p.fens.length)
   }))
   return { v: 2, d: depth, ev, ev2, best, sans: p.sans.join(' '), ucis: p.ucis.join(' '), ph: p.ph, clk: p.clk }
 }
 
 export const CLASS = [['blunder', T.bl], ['mistake', T.ms], ['inaccuracy', T.ia]]
 
-// Per-move judgement of one analysed game. Index i = ply i (0 = White's first move).
-export function judge(a) {
+const bal = fen => { let s = 0; for (const ch of fen.split(' ')[0]) { const v = VAL[ch.toLowerCase()]; if (v) s += ch === ch.toLowerCase() ? -v : v } return s }
+
+// Per-move judgement of one analysed game. Index i = ply i (0 = White's first move). Pass the game's fens to detect sacrifices.
+// Classes: brilliant (a sound sacrifice), great (the only move that holds the position), best, excellent, good, then inaccuracy / mistake / blunder.
+export function judge(a, fens) {
   const ucis = a.ucis.split(' '), out = []
   for (let i = 0; i < ucis.length; i++) {
     const s = i % 2 === 0 ? 1 : -1
     const before = winPct(s * a.ev[i]), after = winPct(s * a.ev[i + 1])
-    const loss = Math.max(0, before - after)
-    const cls = (CLASS.find(([, t]) => loss >= t) || [ucis[i] === a.best[i] ? 'best' : 'good'])[0]
-    out.push({ i, loss, before, after, cls, acc: moveAcc(loss), ph: +a.ph[i] })
+    const loss = Math.max(0, before - after), isBest = ucis[i] === a.best[i]
+    const second = a.ev2 && a.ev2[i] != null ? winPct(s * a.ev2[i]) : null
+    // how much win% the best move beat the runner-up by: a big gap is a critical, high-leverage spot
+    // (missing it swings the game a lot); a small or negative gap means several moves looked about as
+    // good, so finding the true best one among them is harder and more telling than the flat average
+    const gap = second != null ? Math.max(0, before - second) : null
+    let cls = (CLASS.find(([, t]) => loss >= t) || [''])[0]
+    if (!cls) {
+      const sac = fens && fens[i + 2] ? s * (bal(fens[i + 2]) - bal(fens[i])) <= -2 : false
+      cls = loss < 2 && sac && before < 78 && after >= 42 ? 'brilliant'
+        : isBest && second != null && before - second >= 14 && after >= 30 ? 'great'
+        : isBest || loss < 0.6 ? 'best' : loss < 2.5 ? 'excellent' : 'good'
+    }
+    out.push({ i, loss, before, after, cls, acc: moveAcc(loss), ph: +a.ph[i], gap })
   }
   return out
 }
@@ -189,8 +205,36 @@ export function summarize(g, a) {
   const sideFP = Jx => {
     const acc = mean(Jx.map(x => x.acc)), elig = Jx.filter(x => x.i >= 20 && x.before > 10 && x.before < 90)
     let c = 0, sm = 0, q = 0
+    // longest run of near-flawless moves in undecided positions, the same measure fairlib.js's full-record path already used
+    let run = 0, runBest = 0; for (const x of Jx) { if (x.i < 14) continue; if (x.before <= 10 || x.before >= 90 || x.loss >= 1.5) run = 0; else runBest = Math.max(runBest, ++run) }
     if (a.clk && a.clk.length === ucis.length) Jx.forEach(x => { if (x.i < 10) return; const pv = a.clk[x.i - 2]; if (pv != null) { const t = Math.max(0, pv - a.clk[x.i]); c++; sm += t; q += t * t } })
-    return [Jx.length, +acc.toFixed(1), elig.length >= 8 ? +((elig.filter(x => ucis[x.i] === a.best[x.i]).length / elig.length) * 100).toFixed(1) : null, acc >= 96 && Jx.length >= 25 ? 1 : 0, c, +sm.toFixed(1), +q.toFixed(1), ...sharpStats(Jx, a, ucis), ...timeDiffStats(Jx, a, ucis)]
+    const gapped = elig.filter(x => x.gap != null)
+    // order-aware check: does accuracy move together with difficulty in a specific temporal pattern (not just
+    // on average)? A discrete Levy area between the two streams - area swept between them move to move, not
+    // just their correlation - picks up patterns a plain average can hide. Research on this exact approach
+    // (path signatures) found cheating patterns built to leave ordinary averages unchanged, that this still caught.
+    let levy = null
+    if (gapped.length >= 8) {
+      let area = 0
+      for (let k = 0; k < gapped.length - 1; k++) { const x0 = gapped[k].acc, y0 = gapped[k].gap, x1 = gapped[k + 1].acc, y1 = gapped[k + 1].gap; area += x0 * (y1 - y0) - y0 * (x1 - x0) }
+      levy = area / (2 * (gapped.length - 1))
+    }
+    // a selective cheater's optimal policy never spends on the opening and converts better later in the game
+    // (arXiv 2601.05386), so prefer late-game high-leverage moments for this signal when there are enough of them
+    const lateGapped = gapped.filter(x => x.i >= 40)
+    const clutchPool = lateGapped.length >= 6 ? lateGapped : gapped
+    const clutch = clutchPool.length >= 6 ? mean([...clutchPool].sort((x, y) => y.gap - x.gap).slice(0, Math.max(3, Math.ceil(clutchPool.length / 3))).map(x => x.acc)) : null
+    const diffAcc = gapped.length >= 6 ? (() => { const ws = gapped.map(x => 1 / (x.gap + 3)), sw = ws.reduce((t, w) => t + w, 0); return gapped.reduce((t, x, j) => t + x.acc * ws[j], 0) / sw })() : null
+    // "near perfect" uses post-opening accuracy: book moves are near-free accuracy and inflate a short,
+    // theory-heavy game into looking flawless (the Niemann case: several cited "perfect" games were
+    // under 32 total moves, much of that opening theory, not real decision-making)
+    const postAcc = elig.length ? mean(elig.map(x => x.acc)) : acc
+    // decoy blunders: a deliberate "mistake" meant to look human costs nothing played where the result is
+    // already settled; a genuine blunder has no reason to cluster there (same measure as fairlib.js's full-record path)
+    const decided = x => x.before <= 10 || x.before >= 90, errs = Jx.filter(x => x.loss >= T.ms)
+    const errDecided = errs.length >= 4 ? errs.filter(decided).length / errs.length : null
+    const allDecided = Jx.length ? Jx.filter(decided).length / Jx.length : null
+    return [Jx.length, +acc.toFixed(1), elig.length >= 8 ? +((elig.filter(x => ucis[x.i] === a.best[x.i]).length / elig.length) * 100).toFixed(1) : null, postAcc >= 96 && Jx.length >= 25 ? 1 : 0, c, +sm.toFixed(1), +q.toFixed(1), ...sharpStats(Jx, a, ucis), ...timeDiffStats(Jx, a, ucis), clutch == null ? null : +clutch.toFixed(1), diffAcc == null ? null : +diffAcc.toFixed(1), runBest, errDecided == null ? null : +errDecided.toFixed(3), allDecided == null ? null : +allDecided.toFixed(3), levy == null ? null : +levy.toFixed(3)]
   }
   const first = mine.find(x => x.i < 24 && x.loss >= T.ms && a.best[x.i])
   let fd = null
