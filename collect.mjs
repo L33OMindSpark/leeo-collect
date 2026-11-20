@@ -54,6 +54,10 @@ async function recent(u, n) {
   }
   return out
 }
+// bump this whenever sideFP's array (analyze.js) grows, so every result carries which fields it actually has -
+// older records with a lower v simply predate that field and show null for it forever (usernames are never
+// stored, only a one-way hash, so there is no way to go back and re-analyse an old account with new code)
+const FP_VERSION = 24
 const side = f => ({ n: f[0], acc: f[1], match: f[2], perfect: !!f[3], sh: { n: f[7] || 0, hit: f[8] || 0 }, td: f.slice(9, 15).length === 6 ? f.slice(9, 15) : [0, 0, 0, 0, 0, 0], tm: { c: f[4], s: f[5], q: f[6] }, clutch: f[15] ?? null, diffAcc: f[16] ?? null, run: f[17] ?? null, errDecided: f[18] ?? null, allDecided: f[19] ?? null, levy: f[20] ?? null, tmEg: { c: f[21] || 0, s: f[22] || 0, q: f[23] || 0 } })
 const med = a => { const s = a.filter(Boolean).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null }
 const pct = (a, p) => { const x = [...a].sort((m, n) => m - n); return x[Math.min(x.length - 1, Math.floor(p * x.length))] }
@@ -96,7 +100,7 @@ async function one(u, label) {
   const G = await build(DEPTH); if (G.length < 15) return
   const G2 = DEPTH2 ? await build(DEPTH2) : null
   const rating = med(G.map(x => x.g.my)); if (label === 'banned') banRatings.push(rating)
-  results.push({ id: hash(u), label, rating, speed: G[0].g.speed, n: G.length, G, ...(G2 ? { G2, depths: [DEPTH, DEPTH2] } : {}) }); save()
+  results.push({ id: hash(u), label, rating, speed: G[0].g.speed, n: G.length, v: FP_VERSION, G, ...(G2 ? { G2, depths: [DEPTH, DEPTH2] } : {}) }); save()
   console.log(`#${results.length} ${label} rating ${rating} games ${G.length}`)
 }
 
