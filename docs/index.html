@@ -50,7 +50,7 @@ const REPO = 'L33OMindSpark/leeo-collect'
 const P = [
   { id: 'data', wf: 'Collect', name: 'Main collection', what: 'Banned and ordinary accounts, up to 100 recent games each' },
   { id: 'depth16', wf: 'Depth experiment 16', name: 'Depth 16 test', what: 'Same games at depth 12 and depth 16' },
-  { id: 'depth20', wf: 'Depth experiment 20', name: 'Depth 20 test', what: 'Same games at depth 12 and depth 20', repo: 'L33OMindSpark/leeo-depth20' }
+  { id: 'depth20', wf: 'Depth experiment 20', name: 'Depth 20 test', what: 'Same games at depth 12 and depth 20' }
 ]
 const $ = s => document.querySelector(s), esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 const ago = t => { const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago' }
