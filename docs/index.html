@@ -43,6 +43,7 @@ h1 b{font-weight:800;letter-spacing:.06em}
 </header>
 <div class="grid" id="grid"></div>
 <div class="card" id="valcard" style="margin-top:16px"></div>
+<div class="card" id="depthcard" style="margin-top:16px"></div>
 <p class="note">Numbers only, no names. Progress is saved every 15 minutes and the page refreshes every minute. GitHub caches saved files for a few minutes, so the counts can lag a little.</p>
 </main>
 <script>
@@ -58,6 +59,17 @@ const hrs = h => { if (!isFinite(h) || h < 0) return 'unknown'; if (h < 1) retur
 async function get(u) { try { const r = await fetch(u, { cache: 'no-store' }); return r.ok ? r.json() : null } catch { return null } }
 
 const LEVELS = ['Looks clean', 'Worth watching', 'Elevated', 'Strong signals']
+function drawDepth(d) {
+  const el = $('#depthcard')
+  const row = (label, x) => {
+    if (!x || !x.n) return `<div class="row"><div class="lab"><span>${label}</span><span>no data yet</span></div></div>`
+    const low = x.n < 30, d2 = x.depths?.[1]
+    return `<div class="row"><div class="lab"><span>${label} (${x.banned} banned, ${x.clean} ordinary)</span><span>depth 12: ${x.aucShallow?.toFixed(2) ?? '-'} vs depth ${d2}: ${x.aucDeep?.toFixed(2) ?? '-'}</span></div>${low ? `<div class="what" style="color:var(--warn);margin-top:2px">Only ${x.n} accounts so far - too few to mean anything yet</div>` : ''}</div>`
+  }
+  el.innerHTML = `<div class="top"><span class="name">Does more depth actually catch more?</span></div>
+    <div class="what">Same games, scored by the real model at depth 12 and at the deeper level, on accounts both tests have fully collected.</div>
+    ${row('Depth 16 test', d?.depth16)}${row('Depth 20 test', d?.depth20)}`
+}
 function drawVal(v) {
   const el = $('#valcard')
   if (!v) { el.innerHTML = '<div class="what">Detection check: not available yet.</div>'; return }
@@ -72,12 +84,14 @@ function drawVal(v) {
 }
 async function load() {
   const repos = [...new Set(P.map(p => p.repo || REPO))]
-  const [runsByRepo, val, ...st] = await Promise.all([
+  const [runsByRepo, val, depth, ...st] = await Promise.all([
     Promise.all(repos.map(r => get(`https://api.github.com/repos/${r}/actions/runs?per_page=50`))).then(a => Object.fromEntries(repos.map((r, i) => [r, a[i]]))),
     get(`validation.json?t=${Date.now()}`),
+    get(`depth-compare.json?t=${Date.now()}`),
     ...P.map(p => get(`https://raw.githubusercontent.com/${p.repo || REPO}/${p.id}/status.json?t=${Date.now()}`)),
   ])
   drawVal(val)
+  drawDepth(depth)
   $('#grid').innerHTML = P.map((p, i) => {
     const R = runsByRepo[p.repo || REPO]?.workflow_runs || []
     const s = st[i], mine = R.filter(r => r.name === p.wf), live = mine.find(r => r.status !== 'completed'), finished = mine.filter(r => r.status === 'completed')
