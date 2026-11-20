@@ -44,8 +44,8 @@ jobs:
           DEPTH: "12"
           DEPTH2: "20"
           GAMES: "30"
-          TARGET_BANNED: "50"
-          TARGET_CLEAN: "50"
+          TARGET_BANNED: "150"
+          TARGET_CLEAN: "300"
           RUN_ID: ${{ github.run_id }}
           PUSH_BRANCH: depth20
           MAX_MINUTES: "330"
