@@ -92,7 +92,7 @@ async function one(u, label) {
   const build = async depth => { const rows = []
     for (let i = 0; i < games.length; i++) { const g = games[i]; try { const a = await analyzeGame(g, pool, depth); if (a) rows.push({ g, s: summarize(g, a) }) } catch {}
       if (Date.now() - lastProg > 4000) { lastProg = Date.now(); writeStatus({ running: true, current: { user: hash(u), done: i + 1, total: games.length } }) } }
-    return rows.filter(r => r.s.fp && r.s.fp.me[0] >= 14).map(r => ({ g: { t: r.g.t, speed: r.g.speed, my: r.g.my, opp: r.g.opp, score: r.g.score, oppName: '' }, me: side(r.s.fp.me), op: side(r.s.fp.op), dr: r.g.my >= 100 && r.g.opp >= 100 ? r.g.my - r.g.opp : null })) }
+    return rows.filter(r => r.s.fp && r.s.fp.me[0] >= 14).map(r => ({ g: { t: r.g.t, speed: r.g.speed, my: r.g.my, opp: r.g.opp, score: r.g.score, oppName: '', mx: r.s.mx, mn: r.s.mn }, me: side(r.s.fp.me), op: side(r.s.fp.op), dr: r.g.my >= 100 && r.g.opp >= 100 ? r.g.my - r.g.opp : null })) }
   const G = await build(DEPTH); if (G.length < 15) return
   const G2 = DEPTH2 ? await build(DEPTH2) : null
   const rating = med(G.map(x => x.g.my)); if (label === 'banned') banRatings.push(rating)
