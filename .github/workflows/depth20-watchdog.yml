@@ -1,0 +1,26 @@
+# Safety net: Depth experiment 20 can die mid-run (timeout kill) without chaining itself.
+# Every 10 minutes, restart it if it's not running and hasn't reached its targets.
+name: Depth20 watchdog
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Restart depth20 if it stopped early
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          active=$(gh run list -R "$GITHUB_REPOSITORY" --workflow=depth20.yml --json status -q '[.[] | select(.status=="in_progress" or .status=="queued")] | length')
+          if [ "$active" -gt 0 ]; then echo "already running"; exit 0; fi
+          done=$(curl -s "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/depth20/status.json" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).done?"1":"0")}catch{console.log("0")}})')
+          if [ "$done" = "1" ]; then echo "targets reached, not restarting"; exit 0; fi
+          gh workflow run depth20.yml -R "$GITHUB_REPOSITORY"
